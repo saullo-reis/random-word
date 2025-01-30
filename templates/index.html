@@ -1,9 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Palavra Aleatória</title>
+    <title>Gym rats</title>
     <style>
         body {
+            background-image: url('/static/gymrat.jpg');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -17,7 +21,7 @@
             padding: 2rem;
             background-color: white;
             border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
         }
         .palavra {
             font-size: 2.5rem;
@@ -33,7 +37,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Palavra Aleatória:</h1>
+        <h1>Palavra Aleatória do dia:</h1>
         <div class="palavra">{{.Palavra}}</div>
     </div>
 </body>
