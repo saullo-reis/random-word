@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	twilio "github.com/twilio/twilio-go"
+	api "github.com/twilio/twilio-go/rest/api/v2010"
 )
 
 type DailyWord struct {
@@ -21,7 +23,8 @@ type DailyWord struct {
 var dailyWord DailyWord
 
 func main() {
-	if err := refreshWord(); err != nil {
+	_, err := refreshWord(); 
+	if err != nil {
 		log.Fatalf("Erro ao carregar palavra inicial: %v", err)
 	}
 	go scheduleDailyReset()
@@ -42,17 +45,17 @@ func main() {
 	router.Run(":8080")
 }
 
-func refreshWord() error {
+func refreshWord() (string, error) {
 	newWord, err := chooseTheWord()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	dailyWord.mu.Lock()
 	dailyWord.word = newWord
 	dailyWord.mu.Unlock()
 
-	return nil
+	return newWord, nil
 }
 
 func scheduleDailyReset() {
@@ -62,11 +65,44 @@ func scheduleDailyReset() {
 		durationUntilMidnight := nextMidnight.Sub(now)
 
 		<-time.After(durationUntilMidnight)
+		
 
-		if err := refreshWord(); err != nil {
+		wordGenerated, err := refreshWord()
+		if err != nil {
 			log.Printf("Erro ao atualizar palavra: %v", err)
 		} else {
 			log.Println("Palavra do dia atualizada com sucesso")
+		}
+
+		from := "+18458511016"
+		client := twilio.NewRestClientWithParams(twilio.ClientParams{
+			Username: os.Getenv("TWILIO_ACCOUNT_SID"),
+			Password: os.Getenv("TWILIO_AUTH_TOKEN"),
+		})
+		numbersPhone := []string{
+			"+5521994625997",
+		}
+		body := wordGenerated
+
+		for _, to := range numbersPhone {
+			// Configura os parâmetros da mensagem
+			params := &api.CreateMessageParams{
+				To:   &to,
+				From: &from,
+				Body: &body,
+			}
+	
+			resp, err := client.Api.CreateMessage(params)
+			if err != nil {
+				log.Printf("Erro ao enviar mensagem para %s: %v\n", to, err)
+				continue
+			}
+
+			if resp.Sid != nil {
+				fmt.Printf("Mensagem enviada para %s, SID: %s\n", to, *resp.Sid)
+			} else {
+				fmt.Printf("Mensagem enviada para %s, sem SID retornado\n", to)
+			}
 		}
 	}
 }
