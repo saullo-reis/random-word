@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"os"
@@ -12,123 +11,39 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type Estado struct {
-	LastDate   string `json:"last_date"`
-	RandomWord string `json:"random_word"`
+func chargeWords(path string) ([]string, error){
+	archive, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("erro ao abrir o arquivo: %v", err)
+	}
+	defer archive.Close()
+
+	var words []string
+	decode := json.NewDecoder(archive)
+	if err := decode.Decode(&words); err != nil{
+		return nil, fmt.Errorf("erro ao decodificar: %v", err)
+	}
+
+	return words, nil
 }
 
-type Palavras struct {
-	Palavras []string `json:"palavras"`
-}
-
-func carregarPalavras() ([]string, error) {
-
-	file, err := ioutil.ReadFile("palavras.json")
+func wordOfTheDay(words []string) (string, error){
+	loc, err := time.LoadLocation("America/Sao_Paulo")
 	if err != nil {
-		return nil, err
+		return "", fmt.Errorf("erro ao carregar fuso: %v", err)
 	}
+	now := time.Now().In(loc)
+	dataBase := time.Date(now.Year(), now.Month(), now.Day(), 0,0,0,0, loc)
 
-	
-	var p Palavras
-	err = json.Unmarshal(file, &p)
-	if err != nil {
-		return nil, err
-	}
+	seed := dataBase.UnixNano()
+	r := rand.New(rand.NewSource(seed))
 
-	return p.Palavras, nil
-}
-
-func carregarEstado() (*Estado, error) {
-	
-	file, err := ioutil.ReadFile("estado.json")
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &Estado{}, nil 
-		}
-		return nil, err
-	}
-
-	
-	var e Estado
-	err = json.Unmarshal(file, &e)
-	if err != nil {
-		return nil, err
-	}
-
-	return &e, nil
-}
-
-func salvarEstado(estado *Estado) error {
-	
-	data, err := json.MarshalIndent(estado, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	err = ioutil.WriteFile("estado.json", data, 0644)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func obterPalavraAleatoria(palavras []string) string {
-	rand.Seed(time.Now().UnixNano())
-	return palavras[rand.Intn(len(palavras))]
+	indice := r.Intn(len(words))
+	fmt.Println(words[indice])
+	return words[indice], nil
 }
 
 func main() {
-	
-	palavras, err := carregarPalavras()
-	if err != nil {
-		fmt.Println("Erro ao carregar palavras:", err)
-		return
-	}
-
-	
-	estado, err := carregarEstado()
-	if err != nil {
-		fmt.Println("Erro ao carregar estado:", err)
-		return
-	}
-
-	
-	dataAtual := time.Now().Format("2006-01-02")
-
-	
-	if estado.LastDate != dataAtual {
-		
-		estado.RandomWord = obterPalavraAleatoria(palavras)
-		estado.LastDate = dataAtual
-
-		
-		err = salvarEstado(estado)
-		if err != nil {
-			fmt.Println("Erro ao salvar estado:", err)
-			return
-		}
-	}
-
-	ehPalavraValida := false
-	for _, palavra := range palavras {
-		if palavra == estado.RandomWord {
-			ehPalavraValida = true
-			break
-		}
-	}
-	if !ehPalavraValida {
-		estado.RandomWord = obterPalavraAleatoria(palavras)
-	}
-
-	estado.LastDate = dataAtual
-
-	
-	err = salvarEstado(estado)
-	if err != nil {
-		fmt.Println("Erro ao salvar estado:", err)
-		return
-	}
 
 	router := gin.Default()
 	router.Static("/static", "./src")
@@ -136,9 +51,28 @@ func main() {
 	router.LoadHTMLGlob("templates/index.html")
 
 	router.GET("/", func(c *gin.Context) {
+		fmt.Println("Request INFO")
+		fmt.Printf("ip: %v \n", c.ClientIP())
+		fmt.Printf("method: %v \n", c.Request.Method)
+
+		words, err := chargeWords("palavras.json")
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status": 500,
+				"message": err,
+			})
+		}
+
+		word, err := wordOfTheDay(words)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"status": 500,
+				"message": err,
+			})
+		}
 
 		c.HTML(http.StatusOK, "index.html", gin.H{
-			"Palavra": estado.RandomWord,
+			"Palavra": word,
 		})
 	})
 
